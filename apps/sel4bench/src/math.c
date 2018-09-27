@@ -142,11 +142,14 @@ ccnt_compare_fn(const void *a, const void *b)
     return (first > second) - (first < second);
 }
 
+#define SORTED_MAX_SZ 20000
+/* create a copy of the data to sort */
+static ccnt_t sorted_data[SORTED_MAX_SZ];
+
 result_t
 calculate_results(const size_t n, ccnt_t data[n])
 {
-    /* create a copy of the data to sort */
-    ccnt_t sorted_data[n];
+    memset(sorted_data, 0, SORTED_MAX_SZ * sizeof(ccnt_t));
     memcpy(sorted_data, data, n * sizeof(ccnt_t));
 
     /* sort the data */
