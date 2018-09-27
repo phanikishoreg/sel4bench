@@ -1,5 +1,5 @@
 #include <ipc.h>
-#ifdef STD_IPC
+#ifdef MC_IPC
 /*
  * Copyright 2017, Data61
  * Commonwealth Scientific and Industrial Research Organisation (CSIRO)
@@ -31,12 +31,14 @@
 
 #include <benchmark.h>
 
+#define DO_RPC
+
 /* arch/ipc.h requires these defines */
 #define NOPS ""
 
 #include <arch/ipc.h>
 
-#define NUM_ARGS 3
+#define NUM_ARGS 4
 #define WARMUPS RUNS
 #define OVERHEAD_RETRIES 4
 
@@ -51,7 +53,7 @@
 
 typedef struct helper_thread {
     sel4utils_process_t process;
-    seL4_CPtr ep;
+    seL4_CPtr ep, rep;
     seL4_CPtr result_ep;
     char *argv[NUM_ARGS];
     char argv_strings[NUM_ARGS][WORD_STRING_SIZE];
@@ -198,15 +200,23 @@ ipc_recv_func(int argc, char *argv[])
     seL4_CPtr ep = atoi(argv[0]);
     seL4_CPtr result_ep = atoi(argv[1]);
     UNUSED seL4_CPtr reply = atoi(argv[2]);
+    seL4_CPtr rep = atoi(argv[3]);
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(0, 0, 0, 0);
 
     COMPILER_MEMORY_FENCE();
     for (i = 0; i < WARMUPS; i++) {
         READ_COUNTER_BEFORE(start);
         DO_REAL_RECV(ep, reply);
+#ifdef DO_RPC
+        DO_REAL_SEND(rep, tag);
+#endif
         READ_COUNTER_AFTER(end);
     }
     COMPILER_MEMORY_FENCE();
     DO_REAL_RECV(ep, reply);
+#ifdef DO_RPC
+    DO_REAL_SEND(rep, tag);
+#endif
     send_result(result_ep, end);
     return 0;
 }
@@ -218,16 +228,24 @@ ipc_send_func(int argc, char *argv[])
     ccnt_t start UNUSED, end UNUSED;
     seL4_CPtr ep = atoi(argv[0]);
     seL4_CPtr result_ep = atoi(argv[1]);
+    UNUSED seL4_CPtr reply = atoi(argv[2]);
+    seL4_CPtr rep = atoi(argv[3]);
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(0, 0, 0, 0);
     COMPILER_MEMORY_FENCE();
     for (i = 0; i < WARMUPS; i++) {
         READ_COUNTER_BEFORE(start);
         DO_REAL_SEND(ep, tag);
+#ifdef DO_RPC
+        DO_REAL_RECV(rep, reply);
+#endif
         READ_COUNTER_AFTER(end);
     }
     COMPILER_MEMORY_FENCE();
     send_result(result_ep, start);
     DO_REAL_SEND(ep, tag);
+#ifdef DO_RPC
+    DO_REAL_RECV(rep, reply);
+#endif
     return 0;
 }
 
@@ -329,8 +347,8 @@ int
 main(int argc, char **argv)
 {
     env_t *env;
-    vka_object_t ep, result_ep;
-    cspacepath_t ep_path, result_ep_path;
+    vka_object_t ep, result_ep, rep;
+    cspacepath_t ep_path, result_ep_path, rep_path;
 
     static size_t object_freq[seL4_ObjectTypeCount] = {
         [seL4_TCBObject] = 4,
@@ -343,6 +361,13 @@ main(int argc, char **argv)
 
     env = benchmark_get_env(argc, argv, sizeof(ipc_results_t), object_freq);
     ipc_results_t *results = (ipc_results_t *) env->results;
+
+    /* allocate benchmark endpoint - the IPC's that we benchmark
+       will be sent over this ep */
+    if (vka_alloc_endpoint(&env->slab_vka, &rep) != 0) {
+        ZF_LOGF("Failed to allocate endpoint");
+    }
+    vka_cspace_make_path(&env->slab_vka, rep.cptr, &rep_path);
 
     /* allocate benchmark endpoint - the IPC's that we benchmark
        will be sent over this ep */
@@ -367,20 +392,35 @@ main(int argc, char **argv)
     benchmark_shallow_clone_process(env, &server_process.process, seL4_MinPrio, 0, "server process");
     benchmark_configure_thread_in_process(env, &client.process, &server_thread.process, seL4_MinPrio, 0, "server thread");
 
+    sched_params_t params = { 0 };
+    params.core = 1;
+    int error = sel4utils_set_sched_affinity(&client.process.thread, params);
+    assert(!error);
+
     client.ep = sel4utils_copy_path_to_process(&client.process, ep_path);
+    client.rep = sel4utils_copy_path_to_process(&client.process, rep_path);
     client.result_ep = sel4utils_copy_path_to_process(&client.process, result_ep_path);
 
     server_process.ep = sel4utils_copy_path_to_process(&server_process.process, ep_path);
+    server_process.rep = sel4utils_copy_path_to_process(&server_process.process, rep_path);
     server_process.result_ep = sel4utils_copy_path_to_process(&server_process.process, result_ep_path);
 
+    sched_params_t params1 = { 0 };
+    params.core = 0;
+    error = sel4utils_set_sched_affinity(&server_thread.process.thread, params1);
+    assert(!error);
+    error = sel4utils_set_sched_affinity(&server_process.process.thread, params1);
+    assert(!error);
+
     server_thread.ep = client.ep;
+    server_thread.rep = client.rep;
     server_thread.result_ep = client.result_ep;
 
-    sel4utils_create_word_args(client.argv_strings, client.argv, NUM_ARGS, client.ep, client.result_ep, 0);
+    sel4utils_create_word_args(client.argv_strings, client.argv, NUM_ARGS, client.ep, client.result_ep, SEL4UTILS_REPLY_SLOT, client.rep);
     sel4utils_create_word_args(server_process.argv_strings, server_process.argv, NUM_ARGS,
-                                server_process.ep, server_process.result_ep, SEL4UTILS_REPLY_SLOT);
+                                server_process.ep, server_process.result_ep, SEL4UTILS_REPLY_SLOT, server_process.rep);
     sel4utils_create_word_args(server_thread.argv_strings, server_thread.argv, NUM_ARGS,
-                                server_thread.ep, server_thread.result_ep, SEL4UTILS_REPLY_SLOT);
+                                server_thread.ep, server_thread.result_ep, SEL4UTILS_REPLY_SLOT, server_thread.rep);
 
     /* run the benchmark */
     seL4_CPtr auth = simple_get_tcb(&env->simple);

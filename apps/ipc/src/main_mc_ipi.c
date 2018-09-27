@@ -1,5 +1,5 @@
 #include <ipc.h>
-#ifdef STD_IPC
+#ifdef MC_IPI_IPC
 /*
  * Copyright 2017, Data61
  * Commonwealth Scientific and Industrial Research Organisation (CSIRO)

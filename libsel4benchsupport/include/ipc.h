@@ -18,6 +18,10 @@
 #define OVERHEAD_BENCH_PARAMS(n) { .name = n }
 #define RUNS 16
 
+#undef STD_IPC
+#define  MC_IPC
+#undef  MC_IPI_IPC
+
 enum overheads {
     CALL_OVERHEAD,
     REPLY_RECV_OVERHEAD,
@@ -77,94 +81,108 @@ struct overhead_benchmark_params {
 /* array of benchmarks to run */
 /* one way IPC benchmarks - varying size, direction and priority.*/
 static const benchmark_params_t benchmark_params[] = {
-    /* Call fastpath between client and server in the same address space */
+//    /* Call fastpath between client and server in the same address space */
+//    {
+//        .name        = "seL4_Call",
+//        .direction   = DIR_TO,
+//        .client_fn   = IPC_CALL_FUNC2,
+//        .server_fn   = IPC_REPLYRECV_FUNC2,
+//        .same_vspace = true,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = CALL_OVERHEAD,
+//        .passive = true,
+//    },
+//    /* ReplyRecv fastpath between server and client in the same address space */
+//    {
+//        .name        = "seL4_ReplyRecv",
+//        .direction   = DIR_FROM,
+//        .client_fn   = IPC_CALL_FUNC,
+//        .server_fn   = IPC_REPLYRECV_FUNC,
+//        .same_vspace = true,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = REPLY_RECV_OVERHEAD,
+//        .passive = true,
+//    },
+//    /* Call fastpath between client and server in different address spaces */
+//    {
+//        .name        = "seL4_Call",
+//        .direction   = DIR_TO,
+//        .client_fn   = IPC_CALL_FUNC2,
+//        .server_fn   = IPC_REPLYRECV_FUNC2,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = CALL_OVERHEAD,
+//        .passive = true,
+//    },
+//    /* ReplyRecv fastpath between server and client in different address spaces */
+//    {
+//        .name        = "seL4_ReplyRecv",
+//        .direction   = DIR_FROM,
+//        .client_fn   = IPC_CALL_FUNC,
+//        .server_fn   = IPC_REPLYRECV_FUNC,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = REPLY_RECV_OVERHEAD,
+//        .passive = true,
+//    },
+//    /* Send slowpath (no fastpath for send) same prio client-server, different address space */
+//    {
+//        .name        = "seL4_Send",
+//        .direction   = DIR_TO,
+//        .client_fn   = IPC_SEND_FUNC,
+//        .server_fn   = IPC_RECV_FUNC,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 2,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = SEND_OVERHEAD
+//    },
+#ifdef MC_IPC
+    /* Recv path same prio client-server, same address space */
     {
-        .name        = "seL4_Call",
+        .name        = "seL4_Recv",
         .direction   = DIR_TO,
-        .client_fn   = IPC_CALL_FUNC2,
-        .server_fn   = IPC_REPLYRECV_FUNC2,
+        .client_fn   = IPC_RECV_FUNC,
+        .server_fn   = IPC_SEND_FUNC,
         .same_vspace = true,
         .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 0,
-        .overhead_id = CALL_OVERHEAD,
-        .passive = true,
-    },
-    /* ReplyRecv fastpath between server and client in the same address space */
-    {
-        .name        = "seL4_ReplyRecv",
-        .direction   = DIR_FROM,
-        .client_fn   = IPC_CALL_FUNC,
-        .server_fn   = IPC_REPLYRECV_FUNC,
-        .same_vspace = true,
-        .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 0,
-        .overhead_id = REPLY_RECV_OVERHEAD,
-        .passive = true,
-    },
-    /* Call fastpath between client and server in different address spaces */
-    {
-        .name        = "seL4_Call",
-        .direction   = DIR_TO,
-        .client_fn   = IPC_CALL_FUNC2,
-        .server_fn   = IPC_REPLYRECV_FUNC2,
-        .same_vspace = false,
-        .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 0,
-        .overhead_id = CALL_OVERHEAD,
-        .passive = true,
-    },
-    /* ReplyRecv fastpath between server and client in different address spaces */
-    {
-        .name        = "seL4_ReplyRecv",
-        .direction   = DIR_FROM,
-        .client_fn   = IPC_CALL_FUNC,
-        .server_fn   = IPC_REPLYRECV_FUNC,
-        .same_vspace = false,
-        .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 0,
-        .overhead_id = REPLY_RECV_OVERHEAD,
-        .passive = true,
-    },
-    /* Send slowpath (no fastpath for send) same prio client-server, different address space */
-    {
-        .name        = "seL4_Send",
-        .direction   = DIR_TO,
-        .client_fn   = IPC_SEND_FUNC,
-        .server_fn   = IPC_RECV_FUNC,
-        .same_vspace = false,
-        .client_prio = seL4_MaxPrio - 2,
         .server_prio = seL4_MaxPrio - 1,
         .length = 0,
         .overhead_id = SEND_OVERHEAD
     },
-    /* Call slowpath, long IPC (10), same prio client to server, different address space */
-    {
-        .name        = "seL4_Call",
-        .direction   = DIR_TO,
-        .client_fn   = IPC_CALL_10_FUNC2,
-        .server_fn   = IPC_REPLYRECV_10_FUNC2,
-        .same_vspace = false,
-        .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 10,
-        .overhead_id = CALL_10_OVERHEAD
-    },
-    /* ReplyRecv slowpath, long IPC (10), same prio server to client, on the slowpath, different address space */
-    {
-        .name        = "seL4_ReplyRecv",
-        .direction   = DIR_FROM,
-        .client_fn   = IPC_CALL_10_FUNC,
-        .server_fn   = IPC_REPLYRECV_10_FUNC,
-        .same_vspace = false,
-        .client_prio = seL4_MaxPrio - 1,
-        .server_prio = seL4_MaxPrio - 1,
-        .length = 10,
-        .overhead_id = REPLY_RECV_10_OVERHEAD
-    }
+#endif
+//    /* Call slowpath, long IPC (10), same prio client to server, different address space */
+//    {
+//        .name        = "seL4_Call",
+//        .direction   = DIR_TO,
+//        .client_fn   = IPC_CALL_10_FUNC2,
+//        .server_fn   = IPC_REPLYRECV_10_FUNC2,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 10,
+//        .overhead_id = CALL_10_OVERHEAD
+//    },
+//    /* ReplyRecv slowpath, long IPC (10), same prio server to client, on the slowpath, different address space */
+//    {
+//        .name        = "seL4_ReplyRecv",
+//        .direction   = DIR_FROM,
+//        .client_fn   = IPC_CALL_10_FUNC,
+//        .server_fn   = IPC_REPLYRECV_10_FUNC,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 10,
+//        .overhead_id = REPLY_RECV_10_OVERHEAD
+//    }
 };
 
 static const struct overhead_benchmark_params overhead_benchmark_params[] = {
