@@ -16,11 +16,12 @@
 #include <sel4utils/process.h>
 
 #define OVERHEAD_BENCH_PARAMS(n) { .name = n }
-#define RUNS 16
+#define RUNS 10000
 
 #undef STD_IPC
 #define  MC_IPC
 #undef  MC_IPI_IPC
+#undef CALL_MC_IPC
 
 enum overheads {
     CALL_OVERHEAD,
@@ -133,32 +134,32 @@ static const benchmark_params_t benchmark_params[] = {
 //        .overhead_id = REPLY_RECV_OVERHEAD,
 //        .passive = true,
 //    },
-//    /* Send slowpath (no fastpath for send) same prio client-server, different address space */
-//    {
-//        .name        = "seL4_Send",
-//        .direction   = DIR_TO,
-//        .client_fn   = IPC_SEND_FUNC,
-//        .server_fn   = IPC_RECV_FUNC,
-//        .same_vspace = false,
-//        .client_prio = seL4_MaxPrio - 2,
-//        .server_prio = seL4_MaxPrio - 1,
-//        .length = 0,
-//        .overhead_id = SEND_OVERHEAD
-//    },
-#ifdef MC_IPC
-    /* Recv path same prio client-server, same address space */
+    /* Send slowpath (no fastpath for send) same prio client-server, different address space */
     {
-        .name        = "seL4_Recv",
+        .name        = "seL4_Send",
         .direction   = DIR_TO,
-        .client_fn   = IPC_RECV_FUNC,
-        .server_fn   = IPC_SEND_FUNC,
-        .same_vspace = true,
-        .client_prio = seL4_MaxPrio - 1,
+        .client_fn   = IPC_SEND_FUNC,
+        .server_fn   = IPC_RECV_FUNC,
+        .same_vspace = false,
+        .client_prio = seL4_MaxPrio - 2,
         .server_prio = seL4_MaxPrio - 1,
         .length = 0,
         .overhead_id = SEND_OVERHEAD
     },
-#endif
+//#ifdef MC_IPC
+//    /* Recv path same prio client-server, same address space */
+//    {
+//        .name        = "seL4_Recv",
+//        .direction   = DIR_TO,
+//        .client_fn   = IPC_RECV_FUNC,
+//        .server_fn   = IPC_SEND_FUNC,
+//        .same_vspace = false,
+//        .client_prio = seL4_MaxPrio - 1,
+//        .server_prio = seL4_MaxPrio - 1,
+//        .length = 0,
+//        .overhead_id = SEND_OVERHEAD
+//    },
+//#endif
 //    /* Call slowpath, long IPC (10), same prio client to server, different address space */
 //    {
 //        .name        = "seL4_Call",

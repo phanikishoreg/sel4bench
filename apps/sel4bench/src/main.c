@@ -106,7 +106,12 @@ run_benchmark(env_t *env, benchmark_t *benchmark, void *local_results_vaddr, ben
 
     /* configure benchmark process */
     sel4utils_process_config_t config = process_config_default_simple(&env->simple, benchmark->name,
-            seL4_MaxPrio);
+//#ifdef MC_IPI_IPC
+//            seL4_MaxPrio-1
+//#else
+            seL4_MaxPrio
+//#endif
+            );
     config = process_config_mcp(config, seL4_MaxPrio);
     error = sel4utils_configure_process_custom(&process, &env->vka, &env->vspace, config);
     ZF_LOGF_IFERR(error, "Failed to configure process for %s benchmark", benchmark->name);
@@ -135,6 +140,12 @@ run_benchmark(env_t *env, benchmark_t *benchmark, void *local_results_vaddr, ben
     args->stack_vaddr = ((uintptr_t) process.thread.stack_top) - CONFIG_SEL4UTILS_STACK_SIZE;
 
     NAME_THREAD(process.thread.tcb.cptr, benchmark->name);
+//#ifdef MC_IPI_IPC
+    sched_params_t c0params = { 0 };
+    c0params.core = 0;
+    error = sel4utils_set_sched_affinity(&process.thread, c0params);
+    assert(!error);
+//#endif
 
     /* set up shared memory for results */
     args->results = vspace_share_mem(&env->vspace, &process.vspace, local_results_vaddr,
@@ -154,6 +165,7 @@ run_benchmark(env_t *env, benchmark_t *benchmark, void *local_results_vaddr, ben
     char string_args[argc][WORD_STRING_SIZE];
     char *argv[argc];
     sel4utils_create_word_args(string_args, argv, argc, remote_args_vaddr);
+
     /* start process */
     error = sel4utils_spawn_process_v(&process, &env->vka, &env->vspace, argc, argv, 1);
     ZF_LOGF_IF(error, "Failed to start benchmark process");

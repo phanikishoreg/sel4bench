@@ -15,8 +15,8 @@
 #include <sel4bench/sel4bench.h>
 #include <benchmark.h>
 
-#define N_IGNORED 10
-#define N_RUNS (100 + N_IGNORED)
+#define N_IGNORED 0
+#define N_RUNS (10000 + N_IGNORED)
 #define N_PRIOS ((seL4_MaxPrio + seL4_WordBits - 1) / seL4_WordBits)
 
 typedef struct scheduler_results_t {

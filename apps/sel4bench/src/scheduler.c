@@ -35,14 +35,14 @@ process_yield_results(scheduler_results_t *results, ccnt_t overhead, json_t *arr
     result = process_result(N_RUNS, results->thread_yield, desc);
     json_array_append_new(array, result_set_to_json(set));
 
-    set.name = "Process yield";
-    result = process_result(N_RUNS, results->process_yield, desc);
-    json_array_append_new(array, result_set_to_json(set));
-
-    result_t average_results[NUM_AVERAGE_EVENTS];
-    process_average_results(N_RUNS, NUM_AVERAGE_EVENTS, results->average_yield, average_results);
-    json_array_append_new(array, average_counters_to_json("Average seL4_Yield (no thread switch)",
-                                                           average_results));
+//    set.name = "Process yield";
+//    result = process_result(N_RUNS, results->process_yield, desc);
+//    json_array_append_new(array, result_set_to_json(set));
+//
+//    result_t average_results[NUM_AVERAGE_EVENTS];
+//    process_average_results(N_RUNS, NUM_AVERAGE_EVENTS, results->average_yield, average_results);
+//    json_array_append_new(array, average_counters_to_json("Average seL4_Yield (no thread switch)",
+//                                                           average_results));
 }
 
 static void
@@ -106,7 +106,7 @@ scheduler_process(void *results) {
     scheduler_results_t *raw_results = results;
     json_t *array = json_array();
 
-    process_scheduler_results(raw_results, array);
+//    process_scheduler_results(raw_results, array);
 
     result_desc_t desc = {
         .name = "Read ccnt overhead",
@@ -123,7 +123,7 @@ scheduler_process(void *results) {
         .n_results = 1
     };
 
-    json_array_append_new(array, result_set_to_json(set));
+    //json_array_append_new(array, result_set_to_json(set));
 
     process_yield_results(raw_results, ccnt_overhead.min, array);
 

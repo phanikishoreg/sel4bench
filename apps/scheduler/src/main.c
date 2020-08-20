@@ -25,6 +25,7 @@
 #define N_LOW_ARGS 5
 #define N_HIGH_ARGS 4
 #define N_YIELD_ARGS 2
+#define N_YIELD_ARGS2 4
 
 void
 abort(void)
@@ -83,10 +84,25 @@ low_fn(int argc, char **argv)
     seL4_Wait(produce, NULL);
 }
 
+#undef MC_YIELD_BENCH
+#define NCORES 2
+#define NO_INTERFERENCE
+static volatile int testing = 0;
+
+static void
+yield_fn2(int argc, char **argv)
+{
+	while (testing) seL4_Yield();
+}
+
 static void
 yield_fn(int argc, char **argv) {
 
+#ifndef MC_YIELD_BENCH
    assert(argc == N_YIELD_ARGS);
+#else
+   assert(argc == N_YIELD_ARGS2);
+#endif
 
    seL4_CPtr ep = (seL4_CPtr) atol(argv[0]);
    volatile ccnt_t *end = (volatile ccnt_t *) atol(argv[1]);
@@ -97,6 +113,25 @@ yield_fn(int argc, char **argv) {
    }
 
    seL4_Send(ep, seL4_MessageInfo_new(0, 0, 0, 0));
+}
+
+static void
+yield_fn3(int argc, char **argv) {
+	seL4_CPtr yep = (seL4_CPtr) atol(argv[0]);
+	seL4_CPtr rep = (seL4_CPtr) atol(argv[1]);
+	volatile ccnt_t *results = (volatile ccnt_t *) atol(argv[2]);
+	volatile ccnt_t *end = (volatile ccnt_t *) atol(argv[3]);
+    ccnt_t start;
+
+    /* run the benchmark */
+    for (int i = 0; i < N_RUNS; i++) {
+        SEL4BENCH_READ_CCNT(start);
+        seL4_Yield();
+        results[i] = (*end - start);
+    }
+
+    benchmark_wait_children(yep, "yielder", 1);
+    seL4_Send(rep, seL4_MessageInfo_new(0, 0, 0, 0));
 }
 
 static void
@@ -111,6 +146,74 @@ benchmark_yield(seL4_CPtr ep, ccnt_t *results, volatile ccnt_t *end)
     }
 
     benchmark_wait_children(ep, "yielder", 1);
+}
+
+/*
+ * creates 2 threads per core from core 1 to N-1, all doing just seL4_Yield().
+ * on core 0, the main thread and a yield thread as usual measuring seL4_Yield() benchmark.
+ * in sel4bench app main, pinning the main thread of this app to core 0, remember!
+ */
+static void
+benchmark_yield_thread2(env_t *env, seL4_CPtr ep, seL4_CPtr ep2, ccnt_t *results)
+{
+	sel4utils_thread_t thread[2];
+	volatile ccnt_t end;
+	char args_strings[N_YIELD_ARGS2][WORD_STRING_SIZE];
+	char *argv[N_YIELD_ARGS2];
+	char args1_strings[N_YIELD_ARGS2][WORD_STRING_SIZE];
+	char *argv1[N_YIELD_ARGS2];
+
+	benchmark_configure_thread(env, ep, seL4_MaxPrio, "yielder", &thread[0]);
+	sel4utils_create_word_args(args_strings, argv, N_YIELD_ARGS2, ep, (seL4_Word) &end, 0, 0);
+
+	benchmark_configure_thread(env, ep, seL4_MaxPrio, "yielder2", &thread[1]);
+	sel4utils_create_word_args(args1_strings, argv1, N_YIELD_ARGS2, ep, ep2, (seL4_Word)results, (seL4_Word) &end);
+
+	testing = 1;
+	sched_params_t params = { 0 };
+	params.core = 0;
+	int error = sel4utils_set_sched_affinity(&thread[0], params);
+	assert(!error);
+	error = sel4utils_set_sched_affinity(&thread[1], params);
+	assert(!error);
+
+	sel4utils_thread_t cnthds[NCORES-1][2];
+	int i;
+
+#ifndef NO_INTERFERENCE
+	for (i = 1; i < NCORES; i++) {
+		char name[16] = { 0 };
+
+		params.core = i;
+		sprintf(name, "yield%d_0", i);
+		benchmark_configure_thread(env, ep, seL4_MaxPrio, name, &cnthds[i-1][0]);
+
+		error = sel4utils_set_sched_affinity(&cnthds[i-1][0], params);
+		assert(!error);
+		sel4utils_start_thread(&cnthds[i-1][0], (sel4utils_thread_entry_fn) yield_fn2, (void *) N_YIELD_ARGS, (void *) argv, 1);
+		sprintf(name, "yield%d_1", i);
+		benchmark_configure_thread(env, ep, seL4_MaxPrio, name, &cnthds[i-1][1]);
+
+		error = sel4utils_set_sched_affinity(&cnthds[i-1][1], params);
+		assert(!error);
+		sel4utils_start_thread(&cnthds[i-1][1], (sel4utils_thread_entry_fn) yield_fn2, (void *) N_YIELD_ARGS, (void *) argv, 1);
+	}
+#endif
+	seL4_Yield();
+	sel4utils_start_thread(&thread[0], (sel4utils_thread_entry_fn) yield_fn, (void *) N_YIELD_ARGS, (void *) argv, 1);
+	sel4utils_start_thread(&thread[1], (sel4utils_thread_entry_fn) yield_fn3, (void *) N_YIELD_ARGS, (void *) argv1, 1);
+
+    benchmark_yield(ep, results, &end);
+	//seL4_Recv(ep2, NULL);
+	//seL4_TCB_Suspend(thread[1].tcb.cptr);
+	seL4_TCB_Suspend(thread[0].tcb.cptr);
+	testing = 0;
+#ifndef NO_INTERFERENCE
+	for (i = 1; i < NCORES; i++) {
+		seL4_TCB_Suspend(cnthds[i-1][0].tcb.cptr);
+		seL4_TCB_Suspend(cnthds[i-1][1].tcb.cptr);
+	}
+#endif
 }
 
 static void
@@ -346,7 +449,7 @@ main(int argc, char **argv)
 {
     env_t *env;
     UNUSED int error;
-    vka_object_t done_ep, produce, consume;
+    vka_object_t done_ep, produce, consume, donedone_ep;
     scheduler_results_t *results;
 
     static size_t object_freq[seL4_ObjectTypeCount] = {
@@ -366,6 +469,8 @@ main(int argc, char **argv)
 
     error = vka_alloc_endpoint(&env->slab_vka, &done_ep);
     assert(error == seL4_NoError);
+    error = vka_alloc_endpoint(&env->slab_vka, &donedone_ep);
+    assert(error == seL4_NoError);
 
     error = vka_alloc_notification(&env->slab_vka, &produce);
     assert(error == seL4_NoError);
@@ -377,16 +482,20 @@ main(int argc, char **argv)
     measure_signal_overhead(produce.cptr, results->overhead_signal);
     measure_yield_overhead(results->overhead_ccnt);
 
-    benchmark_prio_threads(env, done_ep.cptr, produce.cptr, consume.cptr,
-                               results->thread_results);
-    benchmark_prio_processes(env, done_ep.cptr, produce.cptr, consume.cptr,
-                                 results->process_results);
-    benchmark_set_prio_average(results->set_prio_average, simple_get_tcb(&env->simple));
+//    benchmark_prio_threads(env, done_ep.cptr, produce.cptr, consume.cptr,
+//                               results->thread_results);
+//    benchmark_prio_processes(env, done_ep.cptr, produce.cptr, consume.cptr,
+//                                 results->process_results);
+//    benchmark_set_prio_average(results->set_prio_average, simple_get_tcb(&env->simple));
 
     /* thread yield benchmarks */
+#ifdef MC_YIELD_BENCH
+    benchmark_yield_thread2(env, done_ep.cptr, donedone_ep.cptr, results->thread_yield);
+#else
     benchmark_yield_thread(env, done_ep.cptr, results->thread_yield);
-    benchmark_yield_process(env, done_ep.cptr, results->process_yield);
-    benchmark_yield_average(results->average_yield);
+#endif
+//    benchmark_yield_process(env, done_ep.cptr, results->process_yield);
+//    benchmark_yield_average(results->average_yield);
 
     /* done -> results are stored in shared memory so we can now return */
     benchmark_finished(EXIT_SUCCESS);

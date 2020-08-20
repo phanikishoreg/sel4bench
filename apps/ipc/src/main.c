@@ -37,7 +37,7 @@
 #include <arch/ipc.h>
 
 #define NUM_ARGS 3
-#define WARMUPS RUNS
+#define WARMUPS 1
 #define OVERHEAD_RETRIES 4
 
 #ifndef CONFIG_CYCLE_COUNT
